@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Syne, DM_Sans } from 'next/font/google';
 import './globals.css';
 import { FinanceProvider } from '@/lib/context';
+import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
 
 const syne = Syne({
   subsets: ['latin'],
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-bg-primary font-sans antialiased">
         <FinanceProvider>
+          <ServiceWorkerRegistrar />
           <div className="relative max-w-md mx-auto">
             {children}
           </div>
