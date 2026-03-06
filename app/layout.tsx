@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Syne, DM_Sans } from 'next/font/google';
 import './globals.css';
+import MonthlyEmailReport from '@/components/MonthlyEmailReport';
 import { FinanceProvider } from '@/lib/context';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
 
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-bg-primary font-sans antialiased">
         <FinanceProvider>
           <ServiceWorkerRegistrar />
+          <MonthlyEmailReport />
           <div className="relative max-w-md mx-auto">
             {children}
           </div>
