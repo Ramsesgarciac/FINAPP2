@@ -140,13 +140,28 @@ export default function TransactionsPage() {
 
       {/* Delete confirm */}
       {confirmDelete && (
-        <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
-          <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 100 }}
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            className="modal-sheet"
+            style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
-            <p className="text-text-primary font-display font-bold text-lg mb-2">¿Eliminar transacción?</p>
-            <p className="text-text-secondary text-sm mb-6">Esta acción no se puede deshacer.</p>
+            <p className="text-text-primary font-display font-bold text-lg mb-2">
+              ¿Eliminar transacción?
+            </p>
+            <p className="text-text-secondary text-sm mb-6">
+              Esta acción no se puede deshacer.
+            </p>
             <div className="flex gap-3">
-              <button className="btn-secondary flex-1" onClick={() => setConfirmDelete(null)}>
+              <button
+                className="btn-secondary flex-1"
+                onClick={() => setConfirmDelete(null)}
+              >
                 Cancelar
               </button>
               <button

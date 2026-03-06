@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useFinance } from '@/lib/context';
 import { formatCurrency } from '@/lib/utils';
+import { exportAllDataAsJSON } from '@/lib/db';
 import BottomNav from '@/components/BottomNav';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -19,11 +20,14 @@ export default function SettingsPage() {
   const [name, setName] = useState('');
   const [income, setIncome] = useState('');
   const [currency, setCurrency] = useState('MXN');
+  const [email, setEmail] = useState('');
   const [allocations, setAllocations] = useState({
     rent: 40, food: 20, transport: 10, savings: 20, entertainment: 5, services: 5,
   });
   const [payDay, setPayDay] = useState(1);
   const [saved, setSaved] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportDone, setExportDone] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -32,6 +36,7 @@ export default function SettingsPage() {
       setCurrency(settings.currency);
       setAllocations(settings.budgetAllocations);
       setPayDay(settings.payDay ?? 1);
+      setEmail(settings.email ?? '');
     }
   }, [settings]);
 
@@ -42,12 +47,35 @@ export default function SettingsPage() {
       name,
       monthlyIncome: parseFloat(income) || 0,
       payDay,
+      email,
       budgetAllocations: allocations,
       currency,
       notificationsEnabled: true,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  // Descarga el backup como archivo JSON en el dispositivo
+  const handleExportBackup = async () => {
+    setExporting(true);
+    try {
+      const json = await exportAllDataAsJSON();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `financeapp-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setExportDone(true);
+      setTimeout(() => setExportDone(false), 3000);
+    } catch (e) {
+      console.error('Error exportando:', e);
+    }
+    setExporting(false);
   };
 
   return (
@@ -114,9 +142,7 @@ export default function SettingsPage() {
             ))}
           </div>
           <div className="mt-4">
-            <p className="text-text-secondary text-sm mb-2">
-              📅 Día en que te pagan
-            </p>
+            <p className="text-text-secondary text-sm mb-2">📅 Día en que te pagan</p>
             <p className="text-text-muted text-xs mb-3">
               Usado para calcular desde qué día contar tus finanzas del ciclo actual.
             </p>
@@ -140,6 +166,25 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Email para reportes */}
+      <section className="px-5 mb-5">
+        <p className="text-text-muted text-xs font-semibold tracking-widest mb-3">NOTIFICACIONES</p>
+        <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)' }}>
+          <p className="text-text-secondary text-sm mb-1">📧 Correo para reportes mensuales</p>
+          <p className="text-text-muted text-xs mb-3">
+            Al final de cada ciclo se enviará un resumen con tu respaldo de datos.
+          </p>
+          <input
+            className="input-field"
+            type="email"
+            placeholder="tucorreo@ejemplo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            inputMode="email"
+          />
         </div>
       </section>
 
@@ -188,22 +233,45 @@ export default function SettingsPage() {
       </section>
 
       {/* Save button */}
-      <div className="px-5">
+      <div className="px-5 mb-4">
         <button
           className="btn-primary"
           onClick={handleSave}
           style={{
-            background: saved
-              ? 'linear-gradient(135deg, #10B981, #06B6D4)'
-              : undefined,
+            background: saved ? 'linear-gradient(135deg, #10B981, #06B6D4)' : undefined,
           }}
         >
           {saved ? '✓ Guardado!' : '💾 Guardar Cambios'}
         </button>
       </div>
 
+      {/* Backup manual */}
+      <section className="px-5 mb-5">
+        <p className="text-text-muted text-xs font-semibold tracking-widest mb-3">RESPALDO</p>
+        <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)' }}>
+          <p className="text-text-secondary text-sm mb-1">🛡️ Exportar mis datos</p>
+          <p className="text-text-muted text-xs mb-4">
+            Descarga un archivo JSON con todas tus transacciones, eventos y metas. Guárdalo en un lugar seguro como respaldo ante cualquier pérdida de datos.
+          </p>
+          <button
+            onClick={handleExportBackup}
+            disabled={exporting}
+            className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+            style={{
+              background: exportDone
+                ? 'rgba(16,185,129,0.15)'
+                : 'rgba(79,124,255,0.12)',
+              color: exportDone ? '#10B981' : '#4F7CFF',
+              border: `1px solid ${exportDone ? '#10B981' : '#4F7CFF'}33`,
+            }}
+          >
+            {exporting ? '⏳ Exportando...' : exportDone ? '✓ Descargado!' : '⬇️ Descargar Respaldo'}
+          </button>
+        </div>
+      </section>
+
       {/* App Info */}
-      <div className="px-5 mt-6 mb-4 text-center">
+      <div className="px-5 mt-2 mb-6 text-center">
         <p className="text-text-muted text-xs">FinanceApp v1.0.0 · Datos guardados localmente</p>
         <p className="text-text-muted text-xs mt-1">
           🔒 Tu información nunca sale de tu dispositivo

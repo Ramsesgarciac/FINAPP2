@@ -62,6 +62,7 @@ export interface UserSettings {
   name: string;
   monthlyIncome: number;
   payDay: number;
+  email: string;
   budgetAllocations: {
     food: number;
     transport: number;
@@ -359,6 +360,7 @@ export const DEFAULT_SETTINGS: Omit<UserSettings, 'id'> = {
   name: 'Usuario',
   monthlyIncome: 12000,
   payDay: 1,
+  email: '',
   budgetAllocations: {
     rent: 40,
     food: 20,
@@ -484,4 +486,27 @@ export function predictRunOutDay(
   if (runOutDay > daysInMonth) return null;
 
   return Math.min(runOutDay, daysInMonth);
+
+}
+
+// ─── Export para respaldo ──────────────────────────────────────────────────────
+
+export async function exportAllDataAsJSON(): Promise<string> {
+  const [transactions, events, goals, settings] = await Promise.all([
+    getTransactions(),
+    getScheduledEvents(),
+    getSavingsGoals(),
+    getUserSettings(),
+  ]);
+
+  const backup = {
+    exportDate: new Date().toISOString(),
+    version: '1.0',
+    settings,
+    transactions,
+    scheduledEvents: events,
+    savingsGoals: goals,
+  };
+
+  return JSON.stringify(backup, null, 2);
 }
