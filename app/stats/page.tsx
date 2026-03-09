@@ -10,7 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
 
-const COLORS = ['#4F7CFF', '#8B5CF6', '#F97316', '#EC4899', '#10B981', '#06B6D4'];
+const COLORS = ['var(--accent-blue, #4F7CFF)', 'var(--accent-purple, #8B5CF6)', '#F97316', '#EC4899', '#10B981', '#06B6D4'];
 
 export default function StatsPage() {
   const { transactions, monthSummary, settings, runOutDay, savingsGoals } = useFinance();
@@ -134,8 +134,9 @@ export default function StatsPage() {
             <button key={t.key} onClick={() => setTab(t.key as any)}
               className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
               style={{
-                background: tab === t.key ? '#4F7CFF' : 'var(--bg-elevated)',
-                color: tab === t.key ? 'white' : '#94A3B8',
+                background: tab === t.key ? 'var(--chip-active-bg, rgba(79,124,255,0.9))' : 'var(--bg-elevated)',
+                color: tab === t.key ? 'var(--chip-active-color, white)' : '#94A3B8',
+                border: tab === t.key ? '1px solid var(--chip-active-border, transparent)' : '1px solid transparent',
               }}>
               {t.label}
             </button>
@@ -210,8 +211,8 @@ export default function StatsPage() {
                   <Bar dataKey="amount" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
                   <defs>
                     <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#4F7CFF" />
-                      <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0.6} />
+                      <stop offset="0%" stopColor="var(--accent-blue, #4F7CFF)" />
+                      <stop offset="100%" stopColor="var(--accent-purple, #8B5CF6)" stopOpacity={0.6} />
                     </linearGradient>
                   </defs>
                 </BarChart>
@@ -293,8 +294,8 @@ export default function StatsPage() {
                     <Bar dataKey="totalExpenses" fill="url(#cycleGrad)" radius={[6, 6, 0, 0]} />
                     <defs>
                       <linearGradient id="cycleGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#EC4899" />
-                        <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0.7} />
+                        <stop offset="0%" stopColor="var(--accent-pink, #EC4899)" />
+                        <stop offset="100%" stopColor="var(--accent-purple, #8B5CF6)" stopOpacity={0.7} />
                       </linearGradient>
                     </defs>
                   </BarChart>
@@ -366,7 +367,7 @@ export default function StatsPage() {
                       <p className="text-text-muted text-xs w-8">{d.day}</p>
                       <div className="flex-1 h-1.5 rounded-full" style={{ background: 'var(--bg-elevated)' }}>
                         <div className="h-full rounded-full transition-all"
-                          style={{ width: `${d.pct}%`, background: d.pct === 100 ? '#EF4444' : d.pct > 70 ? '#F97316' : '#4F7CFF' }} />
+                          style={{ width: `${d.pct}%`, background: d.pct === 100 ? '#EF4444' : d.pct > 70 ? "#F97316" : "var(--accent-blue, #4F7CFF)" }} />
                       </div>
                       <p className="text-text-muted text-xs w-16 text-right">
                         {formatCurrency(d.avg, settings?.currency)}

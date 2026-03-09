@@ -70,7 +70,7 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-            style={{ background: 'linear-gradient(135deg, #4F7CFF, #8B5CF6)' }}
+            style={{ background: 'var(--avatar-gradient, linear-gradient(135deg, #4F7CFF, #8B5CF6))' }}
           >
             {settings?.name?.charAt(0) ?? 'U'}
           </div>

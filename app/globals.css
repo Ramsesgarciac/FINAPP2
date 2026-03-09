@@ -33,16 +33,27 @@
   --accent-purple: #EC4899;
   --accent-violet: #DB2777;
   --accent-cyan: #F9A8D4;
-  --accent-green: #BE185D;
+  --accent-green: #34D399;
   --accent-orange: #F472B6;
   --accent-red: #FB7185;
   --accent-pink: #EC4899;
   --text-primary: #FDF2F8;
   --text-secondary: #F9A8D4;
-  --text-muted: #9D174D;
+  --text-muted: #C084FC;
   --border-default: #2A1530;
-  --border-subtle: #3D1A45;
+  --border-subtle: #4A1D5A;
   --balance-gradient: linear-gradient(135deg, #BE185D 0%, #EC4899 50%, #F9A8D4 100%);
+  /* Rose-specific extras */
+  --rose-primary: #EC4899;
+  --rose-bright: #F472B6;
+  --rose-deep: #BE185D;
+  --rose-glow: rgba(236, 72, 153, 0.35);
+  --avatar-gradient: linear-gradient(135deg, #BE185D, #EC4899, #F472B6);
+  --chip-active-bg: rgba(236, 72, 153, 0.2);
+  --chip-active-color: #F472B6;
+  --chip-active-border: rgba(236, 72, 153, 0.5);
+  --dot-color: #EC4899;
+  --dot-alt-color: #F472B6;
 }
 
 * {
@@ -426,4 +437,35 @@ body {
   border-radius: 50%;
   background: var(--accent-red);
   border: 2px solid var(--bg-primary);
+}
+
+/* ── Rose theme overrides ───────────────────────────────────────────────── */
+[data-theme="rose"] .fab {
+  background: linear-gradient(135deg, #BE185D, #EC4899);
+  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.45);
+}
+
+[data-theme="rose"] .btn-primary {
+  background: linear-gradient(135deg, #BE185D, #EC4899);
+}
+
+[data-theme="rose"] .input-field:focus {
+  border-color: #EC4899;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.2);
+}
+
+[data-theme="rose"] .nav-active-glow::after {
+  background: #EC4899;
+  box-shadow: 0 0 8px #EC4899;
+}
+
+[data-theme="rose"] .tab-pill-item.active {
+  color: #F472B6;
+}
+
+[data-theme="rose"] .gradient-text {
+  background: linear-gradient(135deg, #EC4899, #F472B6, #F9A8D4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
