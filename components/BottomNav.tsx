@@ -38,13 +38,13 @@ const navItems = [
     ),
   },
   {
-    href: '/debts',
-    label: 'Deudas',
+    href: '/finanzas',
+    label: 'Finanzas',
     icon: (active: boolean, color: string) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-        <rect x="2" y="5" width="20" height="14" rx="3" stroke={active ? color : '#475569'} strokeWidth="1.75" fill={active ? `${color}22` : 'none'} />
-        <path d="M2 10h20" stroke={active ? color : '#475569'} strokeWidth="1.75" />
-        <path d="M6 15h4M14 15h4" stroke={active ? color : '#475569'} strokeWidth="1.75" strokeLinecap="round" />
+        <circle cx="12" cy="12" r="9" stroke={active ? color : '#475569'} strokeWidth="1.75" fill={active ? `${color}22` : 'none'} />
+        <path d="M12 7v1.5M12 15.5V17M9.5 9.5C9.5 8.12 10.62 7 12 7s2.5 1.12 2.5 2.5c0 1.5-1.5 2-2.5 2.5-1 .5-2.5 1-2.5 2.5C9.5 15.88 10.62 17 12 17s2.5-1.12 2.5-2.5"
+          stroke={active ? color : '#475569'} strokeWidth="1.75" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -66,13 +66,16 @@ export default function BottomNav() {
   const { unreadAlertCount, theme } = useFinance();
   const accentColor = theme === 'rose' ? '#EC4899' : '#4F7CFF';
 
+  // /goals y /debts también activan el tab de Finanzas
+  const isFinanzasActive = pathname === '/finanzas' || pathname === '/goals' || pathname === '/debts';
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 max-w-md mx-auto"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="glass-strong mx-3 mb-3 rounded-2xl px-2 py-2">
         <div className="flex items-center justify-around">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = item.href === '/finanzas' ? isFinanzasActive : pathname === item.href;
             const isHome = item.href === '/';
             const showDot = isHome && unreadAlertCount > 0;
             return (
