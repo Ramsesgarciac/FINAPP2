@@ -62,7 +62,6 @@ export interface UserSettings {
   name: string;
   monthlyIncome: number;
   payDay: number;
-  email: string;
   budgetAllocations: {
     food: number;
     transport: number;
@@ -73,6 +72,31 @@ export interface UserSettings {
   };
   currency: string;
   notificationsEnabled: boolean;
+  email?: string;
+  theme?: 'dark' | 'rose';
+}
+
+export type DebtDirection = 'owe' | 'owed'; // 'owe' = yo debo, 'owed' = me deben
+
+export interface Debt {
+  id?: number;
+  title: string;
+  personName: string;
+  amount: number;
+  paidAmount: number;
+  direction: DebtDirection;
+  dueDate?: string;
+  note?: string;
+  status: 'active' | 'settled';
+  createdAt: string;
+  category: CategoryKey;
+}
+
+export interface CycleNote {
+  id?: number;
+  cycleKey: string; // e.g. '2025-02-15' (cycleStart ISO date sliced to 10)
+  content: string;
+  updatedAt: string;
 }
 
 export interface Alert {
@@ -125,6 +149,21 @@ interface FinanceDB extends DBSchema {
       'by-read': string;
     };
   };
+  debts: {
+    key: number;
+    value: Debt;
+    indexes: {
+      'by-status': string;
+      'by-direction': DebtDirection;
+    };
+  };
+  cycleNotes: {
+    key: number;
+    value: CycleNote;
+    indexes: {
+      'by-cycle': string;
+    };
+  };
 }
 
 // ─── DB Instance ──────────────────────────────────────────────────────────────
@@ -134,44 +173,58 @@ let db: IDBPDatabase<FinanceDB> | null = null;
 export async function getDB(): Promise<IDBPDatabase<FinanceDB>> {
   if (db) return db;
 
-  db = await openDB<FinanceDB>('finance-app-db', 1, {
-    upgrade(database) {
-      // Transactions
-      const txStore = database.createObjectStore('transactions', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      txStore.createIndex('by-date', 'date');
-      txStore.createIndex('by-category', 'category');
-      txStore.createIndex('by-type', 'type');
+  db = await openDB<FinanceDB>('finance-app-db', 2, {
+    upgrade(database, oldVersion) {
+      // ── v1 stores (solo crear si no existen) ──
+      if (oldVersion < 1) {
+        const txStore = database.createObjectStore('transactions', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        txStore.createIndex('by-date', 'date');
+        txStore.createIndex('by-category', 'category');
+        txStore.createIndex('by-type', 'type');
 
-      // Scheduled Events
-      const evStore = database.createObjectStore('scheduledEvents', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      evStore.createIndex('by-date', 'dueDate');
-      evStore.createIndex('by-status', 'status');
+        const evStore = database.createObjectStore('scheduledEvents', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        evStore.createIndex('by-date', 'dueDate');
+        evStore.createIndex('by-status', 'status');
 
-      // Savings Goals
-      const goalsStore = database.createObjectStore('savingsGoals', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      goalsStore.createIndex('by-status', 'status');
+        const goalsStore = database.createObjectStore('savingsGoals', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        goalsStore.createIndex('by-status', 'status');
 
-      // User Settings
-      database.createObjectStore('userSettings', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
+        database.createObjectStore('userSettings', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
 
-      // Alerts
-      const alertStore = database.createObjectStore('alerts', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      alertStore.createIndex('by-read', 'isRead');
+        const alertStore = database.createObjectStore('alerts', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        alertStore.createIndex('by-read', 'isRead');
+      }
+
+      // ── v2 stores (nuevos) ──
+      if (oldVersion < 2) {
+        const debtStore = database.createObjectStore('debts', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        debtStore.createIndex('by-status', 'status');
+        debtStore.createIndex('by-direction', 'direction');
+
+        const noteStore = database.createObjectStore('cycleNotes', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        noteStore.createIndex('by-cycle', 'cycleKey');
+      }
     },
   });
 
@@ -360,7 +413,6 @@ export const DEFAULT_SETTINGS: Omit<UserSettings, 'id'> = {
   name: 'Usuario',
   monthlyIncome: 12000,
   payDay: 1,
-  email: '',
   budgetAllocations: {
     rent: 40,
     food: 20,
@@ -486,27 +538,103 @@ export function predictRunOutDay(
   if (runOutDay > daysInMonth) return null;
 
   return Math.min(runOutDay, daysInMonth);
-
 }
 
-// ─── Export para respaldo ──────────────────────────────────────────────────────
+// ─── Debts ────────────────────────────────────────────────────────────────────
+
+export async function addDebt(debt: Omit<Debt, 'id'>): Promise<number> {
+  const database = await getDB();
+  return database.add('debts', debt as Debt);
+}
+
+export async function getDebts(): Promise<Debt[]> {
+  const database = await getDB();
+  const all = await database.getAll('debts');
+  return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function updateDebt(debt: Debt): Promise<void> {
+  const database = await getDB();
+  await database.put('debts', debt);
+}
+
+export async function deleteDebt(id: number): Promise<void> {
+  const database = await getDB();
+  await database.delete('debts', id);
+}
+
+// ─── Cycle Notes ──────────────────────────────────────────────────────────────
+
+export async function getCycleNote(cycleKey: string): Promise<CycleNote | null> {
+  const database = await getDB();
+  const all = await database.getAll('cycleNotes');
+  return all.find((n) => n.cycleKey === cycleKey) ?? null;
+}
+
+export async function saveCycleNote(cycleKey: string, content: string): Promise<void> {
+  const database = await getDB();
+  const all = await database.getAll('cycleNotes');
+  const existing = all.find((n) => n.cycleKey === cycleKey);
+  if (existing?.id) {
+    await database.put('cycleNotes', { ...existing, content, updatedAt: new Date().toISOString() });
+  } else {
+    await database.add('cycleNotes', { cycleKey, content, updatedAt: new Date().toISOString() } as CycleNote);
+  }
+}
+
+export async function getAllCycleNotes(): Promise<CycleNote[]> {
+  const database = await getDB();
+  return database.getAll('cycleNotes');
+}
+
+// ─── Cycle history for charts ─────────────────────────────────────────────────
+
+export async function getLastNCycles(n: number): Promise<{ cycleKey: string; label: string; totalExpenses: number; totalIncome: number; byCategory: Record<string, number> }[]> {
+  const settings = await getUserSettings();
+  const payDay = settings?.payDay ?? 1;
+  const all = await getTransactions();
+  const results = [];
+
+  for (let i = 0; i < n; i++) {
+    const now = new Date();
+    // Calcular inicio de cada ciclo pasado
+    let cycleStartMonth = now.getMonth() - i;
+    let cycleStartYear = now.getFullYear();
+    while (cycleStartMonth < 0) { cycleStartMonth += 12; cycleStartYear--; }
+
+    const cycleStart = new Date(cycleStartYear, cycleStartMonth, payDay, 0, 0, 0, 0);
+    const cycleEnd = new Date(cycleStartYear, cycleStartMonth + 1, payDay - 1, 23, 59, 59, 999);
+
+    const txs = all.filter((tx) => {
+      const d = new Date(tx.date);
+      return d >= cycleStart && d <= cycleEnd;
+    });
+
+    const totalExpenses = txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const totalIncome = txs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const byCategory: Record<string, number> = {};
+    txs.filter((t) => t.type === 'expense').forEach((t) => {
+      byCategory[t.category] = (byCategory[t.category] || 0) + t.amount;
+    });
+
+    const label = cycleStart.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' });
+    results.push({ cycleKey: cycleStart.toISOString().slice(0, 10), label, totalExpenses, totalIncome, byCategory });
+  }
+
+  return results.reverse();
+}
+
+// ─── Export / Backup ──────────────────────────────────────────────────────────
 
 export async function exportAllDataAsJSON(): Promise<string> {
-  const [transactions, events, goals, settings] = await Promise.all([
+  const [transactions, events, goals, settings, alerts, debts, notes] = await Promise.all([
     getTransactions(),
     getScheduledEvents(),
     getSavingsGoals(),
     getUserSettings(),
+    getAlerts(),
+    getDebts(),
+    getAllCycleNotes(),
   ]);
-
-  const backup = {
-    exportDate: new Date().toISOString(),
-    version: '1.0',
-    settings,
-    transactions,
-    scheduledEvents: events,
-    savingsGoals: goals,
-  };
-
-  return JSON.stringify(backup, null, 2);
+  return JSON.stringify({ transactions, events, goals, settings, alerts, debts, notes, exportedAt: new Date().toISOString() }, null, 2);
 }

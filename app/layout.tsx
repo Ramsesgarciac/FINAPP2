@@ -4,6 +4,8 @@ import './globals.css';
 import MonthlyEmailReport from '@/components/MonthlyEmailReport';
 import { FinanceProvider } from '@/lib/context';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
+import ThemeProvider from '@/components/ThemeProvider';
+
 
 const syne = Syne({
   subsets: ['latin'],
@@ -59,9 +61,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <FinanceProvider>
           <ServiceWorkerRegistrar />
           <MonthlyEmailReport />
-          <div className="relative max-w-md mx-auto">
-            {children}
-          </div>
+          <ThemeProvider>
+            <div className="relative max-w-md mx-auto">
+              {children}
+            </div>
+          </ThemeProvider>
         </FinanceProvider>
       </body>
     </html>

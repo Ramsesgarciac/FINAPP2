@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useFinance } from '@/lib/context';
 import { formatCurrency, formatDate, CATEGORY_CONFIG, getDaysUntil } from '@/lib/utils';
@@ -17,14 +17,22 @@ export default function HomePage() {
     runOutDay,
     dismissAlert,
     isLoading,
+    cycleNote,
+    saveCycleNoteContent,
   } = useFinance();
+
   const [showAddTx, setShowAddTx] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [noteSaved, setNoteSaved] = useState(false);
+
+  // Sync noteText cuando cycleNote se carga desde la DB
+  useEffect(() => {
+    setNoteText(cycleNote);
+  }, [cycleNote]);
 
   const recent = transactions.slice(0, 5);
   const unreadAlerts = alerts.filter((a) => !a.isRead).slice(0, 3);
-  const upcomingBills = scheduledEvents
-    .filter((e) => e.status === 'pending')
-    .slice(0, 3);
+  const upcomingBills = scheduledEvents.filter((e) => e.status === 'pending').slice(0, 3);
 
   const available = monthSummary?.available ?? 0;
   const monthlyIncome = settings?.monthlyIncome ?? 0;
@@ -32,7 +40,14 @@ export default function HomePage() {
   const prevRollover = monthSummary?.prevRollover ?? 0;
   const cycleStart = monthSummary?.cycleStart ? new Date(monthSummary.cycleStart) : null;
   const cycleEnd = monthSummary?.cycleEnd ? new Date(monthSummary.cycleEnd) : null;
-  const formatCycleDate = (d: Date | null) => d ? d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }) : "";
+  const formatCycleDate = (d: Date | null) =>
+    d ? d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '';
+
+  const handleNoteSave = async () => {
+    await saveCycleNoteContent(noteText);
+    setNoteSaved(true);
+    setTimeout(() => setNoteSaved(false), 2000);
+  };
 
   if (isLoading) {
     return (
@@ -49,7 +64,7 @@ export default function HomePage() {
     <div className="h-screen overflow-y-auto pb-28">
       {/* Header */}
       <div
-        className="px-5 pt-14 pb-4 flex items-center justify-between"
+        className="px-5 pb-4 flex items-center justify-between"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
       >
         <div className="flex items-center gap-3">
@@ -67,16 +82,11 @@ export default function HomePage() {
           </div>
         </div>
         <Link href="/alerts" className="relative">
-          <div
-            className="w-10 h-10 rounded-full glass flex items-center justify-center"
-          >
+          <div className="w-10 h-10 rounded-full glass flex items-center justify-center">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path
                 d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"
-                stroke="#94A3B8"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                stroke="#94A3B8" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
               />
             </svg>
           </div>
@@ -100,13 +110,9 @@ export default function HomePage() {
                 <path d="M14 12h-8" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <p
-              className="text-white font-display font-bold mb-5"
-              style={{ fontSize: '2rem', letterSpacing: '-0.02em' }}
-            >
+            <p className="text-white font-display font-bold mb-5" style={{ fontSize: '2rem', letterSpacing: '-0.02em' }}>
               {formatCurrency(available, settings?.currency)}
             </p>
-            {/* Cycle period label */}
             {cycleStart && cycleEnd && (
               <p className="text-white/50 text-[10px] font-medium mb-2">
                 Ciclo: {formatCycleDate(cycleStart)} → {formatCycleDate(cycleEnd)}
@@ -162,9 +168,7 @@ export default function HomePage() {
         <section className="px-5 mb-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-text-primary font-display font-semibold text-base">Alertas</h2>
-            <Link href="/alerts" className="text-accent-blue text-xs font-medium">
-              Ver todas
-            </Link>
+            <Link href="/alerts" className="text-accent-blue text-xs font-medium">Ver todas</Link>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1 -mx-5 px-5">
             {unreadAlerts.map((alert) => (
@@ -182,13 +186,8 @@ export default function HomePage() {
                     {alert.title}
                   </p>
                 </div>
-                <p className="text-text-secondary text-xs leading-relaxed mb-3">
-                  {alert.message}
-                </p>
-                <div
-                  className="h-1 rounded-full"
-                  style={{ background: alert.color, width: '70%', opacity: 0.6 }}
-                />
+                <p className="text-text-secondary text-xs leading-relaxed mb-3">{alert.message}</p>
+                <div className="h-1 rounded-full" style={{ background: alert.color, width: '70%', opacity: 0.6 }} />
               </div>
             ))}
           </div>
@@ -198,24 +197,16 @@ export default function HomePage() {
       {/* Recent Transactions */}
       <section className="px-5 mb-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-text-primary font-display font-semibold text-base">
-            Transacciones Recientes
-          </h2>
-          <Link href="/transactions" className="text-text-secondary text-xs font-medium">
-            Ver historial
-          </Link>
+          <h2 className="text-text-primary font-display font-semibold text-base">Transacciones Recientes</h2>
+          <Link href="/transactions" className="text-text-secondary text-xs font-medium">Ver historial</Link>
         </div>
-
         {recent.length === 0 ? (
           <div
             className="rounded-2xl p-8 text-center"
             style={{ background: 'var(--bg-card)', border: '1px dashed var(--border-subtle)' }}
           >
             <p className="text-text-muted text-sm">Sin transacciones aún</p>
-            <button
-              onClick={() => setShowAddTx(true)}
-              className="mt-3 text-accent-blue text-sm font-medium"
-            >
+            <button onClick={() => setShowAddTx(true)} className="mt-3 text-accent-blue text-sm font-medium">
               + Agregar primera transacción
             </button>
           </div>
@@ -236,17 +227,14 @@ export default function HomePage() {
                     {cat.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-text-primary font-medium text-sm truncate">
-                      {tx.description}
-                    </p>
+                    <p className="text-text-primary font-medium text-sm truncate">{tx.description}</p>
                     <p className="text-text-muted text-xs">{formatDate(tx.date)}</p>
                   </div>
                   <p
                     className="font-display font-semibold text-sm flex-shrink-0"
                     style={{ color: tx.type === 'income' ? '#10B981' : '#EF4444' }}
                   >
-                    {tx.type === 'income' ? '+' : '-'}
-                    {formatCurrency(tx.amount, settings?.currency)}
+                    {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, settings?.currency)}
                   </p>
                 </div>
               );
@@ -255,46 +243,32 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Reminders / Upcoming Bills */}
+      {/* Upcoming Bills */}
       {upcomingBills.length > 0 && (
         <section className="px-5 mb-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-text-primary font-display font-semibold text-base">Recordatorios</h2>
-            <Link href="/agenda" className="text-text-secondary text-xs font-medium">
-              Ver agenda
-            </Link>
+            <Link href="/agenda" className="text-text-secondary text-xs font-medium">Ver agenda</Link>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {upcomingBills.slice(0, 4).map((event) => {
               const daysUntil = getDaysUntil(event.dueDate);
               const cat = CATEGORY_CONFIG[event.category];
               return (
-                <div
-                  key={event.id}
-                  className="rounded-2xl p-4"
-                  style={{ background: 'var(--bg-card)' }}
-                >
+                <div key={event.id} className="rounded-2xl p-4" style={{ background: 'var(--bg-card)' }}>
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center text-base mb-3"
                     style={{ background: cat.bgColor }}
                   >
                     {cat.icon}
                   </div>
-                  <p className="text-text-primary font-semibold text-sm font-display">
-                    {event.title}
-                  </p>
-                  <p className="text-text-muted text-xs mt-0.5">
-                    {formatCurrency(event.amount, settings?.currency)}
-                  </p>
+                  <p className="text-text-primary font-semibold text-sm font-display">{event.title}</p>
+                  <p className="text-text-muted text-xs mt-0.5">{formatCurrency(event.amount, settings?.currency)}</p>
                   <p
                     className="text-xs font-medium mt-2"
                     style={{ color: daysUntil <= 1 ? '#EF4444' : daysUntil <= 3 ? '#F97316' : '#94A3B8' }}
                   >
-                    {daysUntil === 0
-                      ? 'Vence hoy'
-                      : daysUntil < 0
-                      ? 'Vencido'
-                      : `En ${daysUntil} día(s)`}
+                    {daysUntil === 0 ? 'Vence hoy' : daysUntil < 0 ? 'Vencido' : `En ${daysUntil} día(s)`}
                   </p>
                 </div>
               );
@@ -302,6 +276,26 @@ export default function HomePage() {
           </div>
         </section>
       )}
+
+      {/* 📓 Nota del Ciclo */}
+      <section className="px-5 mb-5">
+        <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-text-muted text-xs font-semibold tracking-widest">📓 NOTA DEL CICLO</p>
+            {noteSaved && (
+              <span className="text-xs font-semibold" style={{ color: '#10B981' }}>✓ Guardada</span>
+            )}
+          </div>
+          <textarea
+            className="w-full bg-transparent text-text-secondary text-sm outline-none resize-none placeholder:text-text-muted"
+            placeholder="Escribe algo sobre este ciclo... ej: 'Tuve gasto extra por viaje', 'Mes tranquilo'"
+            rows={3}
+            value={noteText}
+            onChange={(e) => { setNoteText(e.target.value); setNoteSaved(false); }}
+            onBlur={handleNoteSave}
+          />
+        </div>
+      </section>
 
       {/* FAB */}
       <button className="fab" onClick={() => setShowAddTx(true)}>
@@ -311,7 +305,6 @@ export default function HomePage() {
       </button>
 
       <BottomNav />
-
       {showAddTx && <TransactionModal onClose={() => setShowAddTx(false)} />}
     </div>
   );

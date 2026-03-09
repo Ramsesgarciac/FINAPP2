@@ -16,7 +16,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
-  const { settings, updateSettings } = useFinance();
+  const { settings, updateSettings, theme, setTheme } = useFinance();
   const [name, setName] = useState('');
   const [income, setIncome] = useState('');
   const [currency, setCurrency] = useState('MXN');
@@ -50,13 +50,13 @@ export default function SettingsPage() {
       email,
       budgetAllocations: allocations,
       currency,
+      theme,
       notificationsEnabled: true,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  // Descarga el backup como archivo JSON en el dispositivo
   const handleExportBackup = async () => {
     setExporting(true);
     try {
@@ -109,6 +109,59 @@ export default function SettingsPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+        </div>
+      </section>
+
+      {/* Theme */}
+      <section className="px-5 mb-5">
+        <p className="text-text-muted text-xs font-semibold tracking-widest mb-3">🎨 TEMA</p>
+        <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)' }}>
+          <p className="text-text-secondary text-sm mb-4">Elige el estilo visual de la app</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setTheme('dark')}
+              className="flex-1 py-4 rounded-2xl flex flex-col items-center gap-2 transition-all"
+              style={{
+                background: theme === 'dark' ? 'rgba(79,124,255,0.15)' : 'var(--bg-elevated)',
+                border: `2px solid ${theme === 'dark' ? '#4F7CFF' : 'transparent'}`,
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                style={{ background: 'linear-gradient(135deg, #4F7CFF, #8B5CF6)' }}
+              >
+                🌌
+              </div>
+              <p className="text-sm font-semibold" style={{ color: theme === 'dark' ? '#4F7CFF' : '#94A3B8' }}>
+                Dark Blue
+              </p>
+              {theme === 'dark' && (
+                <span className="text-xs font-bold" style={{ color: '#4F7CFF' }}>✓ Activo</span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setTheme('rose')}
+              className="flex-1 py-4 rounded-2xl flex flex-col items-center gap-2 transition-all"
+              style={{
+                background: theme === 'rose' ? 'rgba(236,72,153,0.15)' : 'var(--bg-elevated)',
+                border: `2px solid ${theme === 'rose' ? '#EC4899' : 'transparent'}`,
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                style={{ background: 'linear-gradient(135deg, #BE185D, #EC4899)' }}
+              >
+                🌸
+              </div>
+              <p className="text-sm font-semibold" style={{ color: theme === 'rose' ? '#EC4899' : '#94A3B8' }}>
+                Dark Rose
+              </p>
+              {theme === 'rose' && (
+                <span className="text-xs font-bold" style={{ color: '#EC4899' }}>✓ Activo</span>
+              )}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -169,7 +222,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Email para reportes */}
+      {/* Email */}
       <section className="px-5 mb-5">
         <p className="text-text-muted text-xs font-semibold tracking-widest mb-3">NOTIFICACIONES</p>
         <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)' }}>
@@ -245,22 +298,20 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Backup manual */}
+      {/* Backup */}
       <section className="px-5 mb-5">
         <p className="text-text-muted text-xs font-semibold tracking-widest mb-3">RESPALDO</p>
         <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)' }}>
           <p className="text-text-secondary text-sm mb-1">🛡️ Exportar mis datos</p>
           <p className="text-text-muted text-xs mb-4">
-            Descarga un archivo JSON con todas tus transacciones, eventos y metas. Guárdalo en un lugar seguro como respaldo ante cualquier pérdida de datos.
+            Descarga un archivo JSON con todas tus transacciones, eventos y metas.
           </p>
           <button
             onClick={handleExportBackup}
             disabled={exporting}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
             style={{
-              background: exportDone
-                ? 'rgba(16,185,129,0.15)'
-                : 'rgba(79,124,255,0.12)',
+              background: exportDone ? 'rgba(16,185,129,0.15)' : 'rgba(79,124,255,0.12)',
               color: exportDone ? '#10B981' : '#4F7CFF',
               border: `1px solid ${exportDone ? '#10B981' : '#4F7CFF'}33`,
             }}
@@ -270,12 +321,9 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* App Info */}
       <div className="px-5 mt-2 mb-6 text-center">
         <p className="text-text-muted text-xs">FinanceApp v1.0.0 · Datos guardados localmente</p>
-        <p className="text-text-muted text-xs mt-1">
-          🔒 Tu información nunca sale de tu dispositivo
-        </p>
+        <p className="text-text-muted text-xs mt-1">🔒 Tu información nunca sale de tu dispositivo</p>
       </div>
 
       <BottomNav />

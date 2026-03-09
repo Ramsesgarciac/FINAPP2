@@ -29,6 +29,15 @@ import {
   deleteTransactionByLinkedEvent,
   deleteTransactionByLinkedGoal,
   getCurrentCycleDates,
+  Debt,
+  CycleNote,
+  addDebt,
+  getDebts,
+  updateDebt,
+  deleteDebt,
+  getCycleNote,
+  saveCycleNote,
+  updateTransaction,
 } from './db';
 
 interface MonthSummary {
@@ -67,6 +76,19 @@ interface FinanceContextType {
   updateSettings: (s: Omit<UserSettings, 'id'>) => Promise<void>;
   dismissAlert: (id: number) => Promise<void>;
   unreadAlertCount: number;
+  // Debts
+  debts: Debt[];
+  addNewDebt: (debt: Omit<Debt, 'id'>) => Promise<void>;
+  editDebt: (debt: Debt) => Promise<void>;
+  removeDebt: (id: number) => Promise<void>;
+  // Transactions edit
+  editTransaction: (tx: import('./db').Transaction) => Promise<void>;
+  // Cycle notes
+  cycleNote: string;
+  saveCycleNoteContent: (content: string) => Promise<void>;
+  // Theme
+  theme: 'dark' | 'rose';
+  setTheme: (t: 'dark' | 'rose') => void;
 }
 
 const FinanceContext = createContext<FinanceContextType | null>(null);
@@ -80,16 +102,20 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [monthSummary, setMonthSummary] = useState<MonthSummary | null>(null);
   const [runOutDay, setRunOutDay] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [cycleNote, setCycleNote] = useState<string>('');
+  const [theme, setThemeState] = useState<'dark' | 'rose'>('dark');
 
   const refreshAll = useCallback(async () => {
     const now = new Date();
-    const [txs, events, goals, cfg, als, summary] = await Promise.all([
+    const [txs, events, goals, cfg, als, summary, dbs] = await Promise.all([
       getTransactions(),
       getScheduledEvents(),
       getSavingsGoals(),
       getUserSettings(),
       getAlerts(),
       getMonthSummary(now.getFullYear(), now.getMonth()), // payDay handled internally
+      getDebts(),
     ]);
 
     setTransactions(txs);
@@ -98,6 +124,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setSettings(cfg);
     setAlerts(als);
     setMonthSummary(summary);
+    setDebts(dbs);
+
+    // Load cycle note for current cycle
+    const { cycleStart } = getCurrentCycleDates(cfg?.payDay ?? 1);
+    const noteKey = cycleStart.toISOString().slice(0, 10);
+    const note = await getCycleNote(noteKey);
+    setCycleNote(note?.content ?? '');
+
+    // Load theme from settings
+    if (cfg?.theme) setThemeState(cfg.theme);
 
     const runOut = predictRunOutDay(
       summary.totalExpenses,
@@ -288,6 +324,40 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     await refreshAll();
   };
 
+  const addNewDebt = async (debt: Omit<Debt, 'id'>) => {
+    await addDebt(debt);
+    await refreshAll();
+  };
+
+  const editDebt = async (debt: Debt) => {
+    await updateDebt(debt);
+    await refreshAll();
+  };
+
+  const removeDebt = async (id: number) => {
+    await deleteDebt(id);
+    await refreshAll();
+  };
+
+  const editTransaction = async (tx: import('./db').Transaction) => {
+    await updateTransaction(tx);
+    await refreshAll();
+  };
+
+  const saveCycleNoteContent = async (content: string) => {
+    const { cycleStart } = getCurrentCycleDates(settings?.payDay ?? 1);
+    const noteKey = cycleStart.toISOString().slice(0, 10);
+    await saveCycleNote(noteKey, content);
+    setCycleNote(content);
+  };
+
+  const setTheme = async (t: 'dark' | 'rose') => {
+    setThemeState(t);
+    if (settings) {
+      await updateSettings({ ...settings, theme: t });
+    }
+  };
+
   return (
     <FinanceContext.Provider
       value={{
@@ -311,6 +381,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         updateSettings,
         dismissAlert,
         unreadAlertCount,
+        debts,
+        addNewDebt,
+        editDebt,
+        removeDebt,
+        editTransaction,
+        cycleNote,
+        saveCycleNoteContent,
+        theme,
+        setTheme,
       }}
     >
       {children}
