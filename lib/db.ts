@@ -95,12 +95,13 @@ export interface Debt {
   paidAmount: number;
   direction: DebtDirection;
   dueDate?: string;
+  alertDays?: number;  // días antes del vencimiento para alertar (ej: 3, 7)
   note?: string;
   status: 'active' | 'settled';
   createdAt: string;
   category: CategoryKey;
-  settledCycleKey?: string;  // ciclo en que se saldó, e.g. '2025-02-15'
-  settledAt?: string;        // fecha exacta en que se saldó
+  settledCycleKey?: string;
+  settledAt?: string;
 }
 
 export interface CycleNote {

@@ -220,9 +220,42 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           }
         }
       }
+
+      // Debt due date alerts
+      for (const debt of debts) {
+        if (debt.status !== 'active' || !debt.dueDate || !debt.id) continue;
+        const alertDays = debt.alertDays ?? 3;
+        const daysUntil = Math.ceil(
+          (new Date(debt.dueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const isOverdue = daysUntil < 0;
+        const shouldAlert = isOverdue || daysUntil <= alertDays;
+        if (shouldAlert) {
+          const todayStr = now.toISOString().slice(0, 10);
+          const exists = allAlerts.find(
+            (a) => a.type === 'reminder' && a.linkedId === debt.id &&
+              a.createdAt.startsWith(todayStr)
+          );
+          if (!exists) {
+            const remaining = debt.amount - debt.paidAmount;
+            await addAlert({
+              type: 'reminder',
+              title: isOverdue
+                ? `⚠️ Deuda vencida: ${debt.title}`
+                : `Deuda vence en ${daysUntil} día(s): ${debt.title}`,
+              message: `${debt.direction === 'owe' ? 'Debes' : 'Te deben'} $${remaining.toFixed(2)} a ${debt.personName}.`,
+              icon: debt.direction === 'owe' ? '😬' : '💰',
+              color: isOverdue ? '#EF4444' : '#F97316',
+              createdAt: now.toISOString(),
+              isRead: false,
+              linkedId: debt.id,
+            });
+          }
+        }
+      }
     };
     generateAlerts().catch(console.error);
-  }, [monthSummary, settings, scheduledEvents]);
+  }, [monthSummary, settings, scheduledEvents, debts]);
 
   const unreadAlertCount = alerts.filter((a) => !a.isRead).length;
 
@@ -247,17 +280,18 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateEvent = async (event: ScheduledEvent) => {
-    // Obtener estado anterior para detectar cambios
     const previous = scheduledEvents.find((e) => e.id === event.id);
     const wasNotPaid = previous?.status !== 'paid';
     const isNowPaid = event.status === 'paid';
     const wasNotPending = previous?.status !== 'pending';
     const isNowPending = event.status === 'pending';
 
+    // Guardar PRIMERO en DB con el monto real
     await updateScheduledEvent(event);
 
-    // Al marcar como PAGADO: crear transacción de gasto
+    // Al marcar como PAGADO: limpiar transacción previa y crear nueva con monto real
     if (wasNotPaid && isNowPaid && event.id) {
+      await deleteTransactionByLinkedEvent(event.id);
       await addTransaction({
         type: 'expense',
         amount: event.amount,
@@ -270,16 +304,32 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // Al revertir a PENDIENTE: eliminar la transacción generada
+    // Al revertir a PENDIENTE: eliminar la transacción y restaurar monto original
     if (wasNotPending && isNowPending && event.id) {
       await deleteTransactionByLinkedEvent(event.id);
+      // Restaurar monto original presupuestado si existe
+      if (previous?.amount) {
+        await updateScheduledEvent({ ...event, amount: previous.amount });
+      }
     }
 
     await refreshAll();
   };
 
   const addNewGoal = async (goal: Omit<SavingsGoal, 'id'>) => {
-    await addSavingsGoal(goal);
+    const id = await addSavingsGoal(goal);
+    // Si el usuario ya tiene un monto inicial, registrarlo como gasto
+    if (goal.currentAmount > 0) {
+      await addTransaction({
+        type: 'expense',
+        amount: goal.currentAmount,
+        category: 'savings',
+        description: `Ahorro inicial: ${goal.title}`,
+        date: new Date().toISOString(),
+        activityType: 'important',
+        linkedGoalId: id,
+      });
+    }
     await refreshAll();
   };
 
@@ -339,7 +389,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       refundAmount: refundAmount ?? 0,
     });
 
-    // Si hay monto a devolver, crear ingreso
+    // Eliminar TODOS los abonos previos de la meta (dejan de contar como gasto)
+    await deleteAllTransactionsByLinkedGoal(id);
+
+    // Si hay monto a devolver, crear ingreso neto
     if (refundAmount && refundAmount > 0) {
       await addTransaction({
         type: 'income',

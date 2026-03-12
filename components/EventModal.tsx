@@ -3,33 +3,56 @@
 import { useState } from 'react';
 import { useFinance } from '@/lib/context';
 import { CATEGORY_CONFIG } from '@/lib/utils';
-import { CategoryKey, ActivityType } from '@/lib/db';
+import { CategoryKey, ActivityType, ScheduledEvent } from '@/lib/db';
 
 interface Props {
   onClose: () => void;
   defaultDate?: string;
+  editing?: ScheduledEvent;
 }
 
 const CATEGORIES = Object.entries(CATEGORY_CONFIG)
   .filter(([k]) => k !== 'income' && k !== 'other')
   .map(([key, val]) => ({ key: key as CategoryKey, ...val }));
 
-export default function EventModal({ onClose, defaultDate }: Props) {
-  const { addNewEvent } = useFinance();
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<CategoryKey>('services');
-  const [activityType, setActivityType] = useState<ActivityType>('important');
-  const [dueDate, setDueDate] = useState(defaultDate ?? new Date().toISOString().slice(0, 10));
-  const [dueTime, setDueTime] = useState('09:00');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [note, setNote] = useState('');
+export default function EventModal({ onClose, defaultDate, editing }: Props) {
+  const { addNewEvent, updateEvent } = useFinance();
+
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [amount, setAmount] = useState(editing?.amount.toString() ?? '');
+  const [category, setCategory] = useState<CategoryKey>(editing?.category ?? 'services');
+  const [activityType, setActivityType] = useState<ActivityType>(editing?.activityType ?? 'important');
+  const [dueDate, setDueDate] = useState(
+    editing ? editing.dueDate.slice(0, 10) : (defaultDate ?? new Date().toISOString().slice(0, 10))
+  );
+  const [dueTime, setDueTime] = useState(
+    editing ? editing.dueDate.slice(11, 16) : '09:00'
+  );
+  const [isRecurring, setIsRecurring] = useState(editing?.isRecurring ?? false);
+  const [note, setNote] = useState(editing?.note ?? '');
   const [saving, setSaving] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  const isDirty = title.trim() !== '' || amount !== '';
+
+  const handleClose = () => {
+    if (isDirty && !editing) {
+      setConfirmClose(true);
+    } else {
+      onClose();
+    }
+  };
+
+  // Haptic feedback
+  const haptic = (style: 'light' | 'medium' = 'light') => {
+    if ('vibrate' in navigator) navigator.vibrate(style === 'light' ? 30 : 60);
+  };
 
   const handleSave = async () => {
     if (!title.trim() || !amount) return;
     setSaving(true);
-    await addNewEvent({
+    haptic('medium');
+    const payload = {
       title: title.trim(),
       amount: parseFloat(amount),
       category,
@@ -37,21 +60,35 @@ export default function EventModal({ onClose, defaultDate }: Props) {
       activityType,
       isRecurring,
       recurringMonthly: isRecurring,
-      status: 'pending',
+      status: editing?.status ?? 'pending' as const,
       note: note.trim() || undefined,
-    });
-    setSaving(false);
-    onClose();
+    };
+    try {
+      if (editing?.id !== undefined) {
+        await updateEvent({ ...payload, id: editing.id });
+      } else {
+        await addNewEvent(payload);
+      }
+    } finally {
+      setSaving(false);
+      onClose();
+    }
   };
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-sheet">
+    <div className="modal-overlay" onClick={handleClose}>
+      <div
+        className="modal-sheet"
+        style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
 
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-text-primary font-display font-bold text-lg">Nuevo Evento</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-bg-elevated flex items-center justify-center">
+          <h2 className="text-text-primary font-display font-bold text-lg">
+            {editing ? 'Editar Evento' : 'Nuevo Evento'}
+          </h2>
+          <button onClick={handleClose} className="w-8 h-8 rounded-full bg-bg-elevated flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path d="M18 6L6 18M6 6l12 12" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -79,6 +116,7 @@ export default function EventModal({ onClose, defaultDate }: Props) {
           placeholder="Título (ej: Netflix, Renta...)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          autoFocus={!editing}
         />
 
         <input
@@ -98,6 +136,7 @@ export default function EventModal({ onClose, defaultDate }: Props) {
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
+              style={{ colorScheme: 'dark' }}
             />
           </div>
           <div>
@@ -107,6 +146,7 @@ export default function EventModal({ onClose, defaultDate }: Props) {
               type="time"
               value={dueTime}
               onChange={(e) => setDueTime(e.target.value)}
+              style={{ colorScheme: 'dark' }}
             />
           </div>
         </div>
@@ -166,9 +206,38 @@ export default function EventModal({ onClose, defaultDate }: Props) {
           disabled={saving || !title.trim() || !amount}
           style={{ opacity: saving || !title.trim() || !amount ? 0.5 : 1 }}
         >
-          {saving ? 'Guardando...' : '📅 Guardar Evento'}
+          {saving ? 'Guardando...' : editing ? '✏️ Guardar Cambios' : '📅 Guardar Evento'}
         </button>
       </div>
+
+      {/* Confirmación de cierre con datos */}
+      {confirmClose && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 110 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="modal-sheet"
+            style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
+            <p className="text-text-primary font-display font-bold text-lg mb-2">¿Descartar cambios?</p>
+            <p className="text-text-secondary text-sm mb-6">Tienes información sin guardar. Si sales ahora se perderá.</p>
+            <div className="flex gap-3">
+              <button className="btn-secondary flex-1" onClick={() => setConfirmClose(false)}>Seguir editando</button>
+              <button
+                className="flex-1 py-3.5 rounded-xl font-semibold text-white"
+                style={{ background: '#EF4444' }}
+                onClick={onClose}
+              >
+                Descartar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

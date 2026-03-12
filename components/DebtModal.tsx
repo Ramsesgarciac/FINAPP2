@@ -21,21 +21,39 @@ export default function DebtModal({ onClose, editing }: Props) {
     const [title, setTitle] = useState(editing?.title ?? '');
     const [amount, setAmount] = useState(editing?.amount.toString() ?? '');
     const [dueDate, setDueDate] = useState(editing?.dueDate?.slice(0, 10) ?? '');
+    const [alertDays, setAlertDays] = useState<number>(editing?.alertDays ?? 3);
     const [note, setNote] = useState(editing?.note ?? '');
     const [category, setCategory] = useState<CategoryKey>(editing?.category ?? 'services');
     const [saving, setSaving] = useState(false);
+    const [confirmClose, setConfirmClose] = useState(false);
+
+    const isDirty = personName.trim() !== '' || title.trim() !== '' || amount !== '';
+
+    const handleClose = () => {
+        if (isDirty && !editing) {
+            setConfirmClose(true);
+        } else {
+            onClose();
+        }
+    };
+
+    const haptic = (style: 'light' | 'medium' = 'light') => {
+        if ('vibrate' in navigator) navigator.vibrate(style === 'light' ? 30 : 60);
+    };
 
     const handleSave = async () => {
         const num = parseFloat(amount);
         if (!num || !personName.trim() || !title.trim()) return;
         setSaving(true);
+        haptic('medium');
         const payload: Omit<Debt, 'id'> = {
             title: title.trim(),
             personName: personName.trim(),
             amount: num,
             paidAmount: editing?.paidAmount ?? 0,
             direction,
-            dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+            dueDate: dueDate ? new Date(dueDate + 'T12:00:00').toISOString() : undefined,
+            alertDays: dueDate ? alertDays : undefined,
             note: note.trim() || undefined,
             status: editing?.status ?? 'active',
             createdAt: editing?.createdAt ?? new Date().toISOString(),
@@ -54,11 +72,7 @@ export default function DebtModal({ onClose, editing }: Props) {
     };
 
     return (
-        <div
-            className="modal-overlay"
-            style={{ zIndex: 100 }}
-            onClick={() => onClose()}
-        >
+        <div className="modal-overlay" style={{ zIndex: 100 }} onClick={handleClose}>
             <div
                 className="modal-sheet"
                 style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
@@ -145,6 +159,30 @@ export default function DebtModal({ onClose, editing }: Props) {
                     style={{ colorScheme: 'dark' }}
                 />
 
+                {/* Alerta de vencimiento — solo si hay fecha */}
+                {dueDate && (
+                    <div className="p-3 rounded-xl mb-3" style={{ background: 'var(--bg-elevated)' }}>
+                        <p className="text-text-primary text-sm font-medium mb-1">⏰ Alertar antes de vencer</p>
+                        <p className="text-text-muted text-xs mb-3">Recibirás una alerta en la app este número de días antes de la fecha límite.</p>
+                        <div className="flex gap-2">
+                            {[1, 3, 7, 14].map((d) => (
+                                <button
+                                    key={d}
+                                    onClick={() => setAlertDays(d)}
+                                    className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
+                                    style={{
+                                        background: alertDays === d ? 'rgba(79,124,255,0.2)' : 'var(--bg-card)',
+                                        color: alertDays === d ? '#4F7CFF' : '#94A3B8',
+                                        border: `1px solid ${alertDays === d ? '#4F7CFF44' : 'transparent'}`,
+                                    }}
+                                >
+                                    {d}d
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <p className="text-text-muted text-xs font-semibold tracking-widest mb-2">NOTA (opcional)</p>
                 <input
                     className="input-field mb-5"
@@ -154,7 +192,7 @@ export default function DebtModal({ onClose, editing }: Props) {
                 />
 
                 <div className="flex gap-3">
-                    <button className="btn-secondary flex-1" onClick={() => onClose()}>Cancelar</button>
+                    <button className="btn-secondary flex-1" onClick={handleClose}>Cancelar</button>
                     <button
                         className="btn-primary flex-1"
                         onClick={handleSave}
@@ -165,6 +203,35 @@ export default function DebtModal({ onClose, editing }: Props) {
                     </button>
                 </div>
             </div>
+
+            {/* Confirmación de cierre con datos */}
+            {confirmClose && (
+                <div
+                    className="modal-overlay"
+                    style={{ zIndex: 110 }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div
+                        className="modal-sheet"
+                        style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
+                        <p className="text-text-primary font-display font-bold text-lg mb-2">¿Descartar cambios?</p>
+                        <p className="text-text-secondary text-sm mb-6">Tienes información sin guardar. Si sales ahora se perderá.</p>
+                        <div className="flex gap-3">
+                            <button className="btn-secondary flex-1" onClick={() => setConfirmClose(false)}>Seguir editando</button>
+                            <button
+                                className="flex-1 py-3.5 rounded-xl font-semibold text-white"
+                                style={{ background: '#EF4444' }}
+                                onClick={onClose}
+                            >
+                                Descartar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

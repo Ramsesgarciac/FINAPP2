@@ -20,6 +20,7 @@ export default function AgendaPage() {
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<number>(today.getDate());
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<ScheduledEvent | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<ScheduledEvent | null>(null);
 
   // Modal de confirmación de pago con monto real
@@ -51,12 +52,19 @@ export default function AgendaPage() {
     .filter((e) => e.status === 'pending')
     .slice(0, 6);
 
+  // Haptic feedback
+  const haptic = (style: 'light' | 'medium' = 'light') => {
+    if ('vibrate' in navigator) navigator.vibrate(style === 'light' ? 30 : 60);
+  };
+
   // Abre modal de pago o revierte si ya está pagado
   const handlePayClick = (event: ScheduledEvent) => {
     if (event.status === 'paid') {
+      haptic('light');
       updateEvent({ ...event, status: 'pending' });
       return;
     }
+    haptic('light');
     setActualSpent(event.amount.toString());
     setPayConfirm(event);
   };
@@ -64,6 +72,7 @@ export default function AgendaPage() {
   // Confirma el pago con el monto real gastado
   const handleConfirmPay = async () => {
     if (!payConfirm) return;
+    haptic('medium');
     const real = parseFloat(actualSpent) || payConfirm.amount;
     await updateEvent({ ...payConfirm, status: 'paid', amount: real });
     setPayConfirm(null);
@@ -282,12 +291,19 @@ export default function AgendaPage() {
                       <button
                         onClick={() => handlePayClick(event)}
                         className="badge badge-paid"
-                        title="Clic para marcar como pendiente"
+                        title="Clic para revertir a pendiente"
                       >
                         ✓ Pagado
                       </button>
                     ) : (
                       <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setEditingEvent(event)}
+                          className="badge"
+                          style={{ background: 'rgba(79,124,255,0.12)', color: '#4F7CFF', border: '1px solid rgba(79,124,255,0.2)' }}
+                        >
+                          ✏️
+                        </button>
                         <button
                           onClick={() => handlePayClick(event)}
                           className="badge badge-pending"
@@ -300,7 +316,7 @@ export default function AgendaPage() {
                             className="badge"
                             style={{ background: 'rgba(148,163,184,0.12)', color: '#94A3B8', border: '1px solid rgba(148,163,184,0.2)' }}
                           >
-                            ✕ Cancelar
+                            ✕
                           </button>
                         )}
                       </div>
@@ -389,6 +405,7 @@ export default function AgendaPage() {
 
       <BottomNav />
       {showAddEvent && <EventModal onClose={() => setShowAddEvent(false)} defaultDate={selectedDateStr} />}
+      {editingEvent && <EventModal onClose={() => setEditingEvent(null)} editing={editingEvent} />}
 
       {/* ── Modal confirmación de pago ── */}
       {payConfirm && (
