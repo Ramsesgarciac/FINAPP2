@@ -14,7 +14,7 @@ export type CategoryKey =
 
 export type ActivityType = 'important' | 'leisure';
 export type TransactionType = 'expense' | 'income';
-export type GoalStatus = 'active' | 'completed' | 'archived';
+export type GoalStatus = 'active' | 'completed' | 'archived' | 'cancelled';
 
 export interface Transaction {
   id?: number;
@@ -29,6 +29,7 @@ export interface Transaction {
   recurringDay?: number; // day of month
   linkedEventId?: number;  // si viene de un evento de agenda
   linkedGoalId?: number;   // si viene de un abono a meta
+  linkedDebtId?: number;   // si viene de un pago de deuda
 }
 
 export interface ScheduledEvent {
@@ -55,6 +56,14 @@ export interface SavingsGoal {
   icon?: string;
   note?: string;
   createdAt: string;
+  completedCycleKey?: string;   // ciclo en que se completó
+  cancelledCycleKey?: string;   // ciclo en que se canceló
+  cancelledAt?: string;         // cuándo se canceló
+  cancelReason?: string;        // motivo de cancelación
+  refundAmount?: number;        // monto devuelto al cancelar
+  deletedWithRefund?: boolean;  // legacy
+  deletedNote?: string;         // legacy
+  deletedAt?: string;           // legacy
 }
 
 export interface UserSettings {
@@ -90,6 +99,8 @@ export interface Debt {
   status: 'active' | 'settled';
   createdAt: string;
   category: CategoryKey;
+  settledCycleKey?: string;  // ciclo en que se saldó, e.g. '2025-02-15'
+  settledAt?: string;        // fecha exacta en que se saldó
 }
 
 export interface CycleNote {
@@ -338,6 +349,24 @@ export async function deleteTransactionByLinkedGoal(goalId: number, amount: numb
   if (match?.id) {
     const database = await getDB();
     await database.delete('transactions', match.id);
+  }
+}
+
+export async function deleteAllTransactionsByLinkedGoal(goalId: number): Promise<void> {
+  const all = await getTransactions();
+  const matches = all.filter((t) => t.linkedGoalId === goalId);
+  const database = await getDB();
+  for (const t of matches) {
+    if (t.id) await database.delete('transactions', t.id);
+  }
+}
+
+export async function deleteTransactionsByLinkedDebt(debtId: number): Promise<void> {
+  const all = await getTransactions();
+  const matches = all.filter((t) => t.linkedDebtId === debtId);
+  const database = await getDB();
+  for (const t of matches) {
+    if (t.id) await database.delete('transactions', t.id);
   }
 }
 

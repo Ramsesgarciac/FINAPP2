@@ -38,6 +38,8 @@ import {
   getCycleNote,
   saveCycleNote,
   updateTransaction,
+  deleteAllTransactionsByLinkedGoal,
+  deleteTransactionsByLinkedDebt,
 } from './db';
 
 interface MonthSummary {
@@ -72,7 +74,7 @@ interface FinanceContextType {
   updateEvent: (event: ScheduledEvent) => Promise<void>;
   addNewGoal: (goal: Omit<SavingsGoal, 'id'>) => Promise<void>;
   updateGoal: (goal: SavingsGoal) => Promise<void>;
-  removeGoal: (id: number) => Promise<void>;
+  removeGoal: (id: number, refundAmount?: number, refundNote?: string) => Promise<void>;
   updateSettings: (s: Omit<UserSettings, 'id'>) => Promise<void>;
   dismissAlert: (id: number) => Promise<void>;
   unreadAlertCount: number;
@@ -282,35 +284,74 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateGoal = async (goal: SavingsGoal) => {
-    // Detectar si es un abono (currentAmount aumentó)
     const previous = savingsGoals.find((g) => g.id === goal.id);
-    const abono = goal.currentAmount - (previous?.currentAmount ?? 0);
+    const prevAmount = previous?.currentAmount ?? 0;
+    const abono = goal.currentAmount - prevAmount;
 
-    await updateSavingsGoal(goal);
+    // Registrar ciclo al completar
+    const isNowCompleted = goal.status === 'completed' && previous?.status !== 'completed';
+    const goalToSave = isNowCompleted
+      ? { ...goal, completedCycleKey: getCurrentCycleDates(settings?.payDay ?? 1).cycleStart.toISOString().slice(0, 10) }
+      : goal;
 
-    // Si se abonó dinero: crear transacción de gasto (ahorro)
+    await updateSavingsGoal(goalToSave);
+
     if (abono > 0 && goal.id) {
+      // Abono: registrar como gasto (se aparta dinero)
       await addTransaction({
         type: 'expense',
         amount: abono,
         category: 'savings',
-        description: `Abono: ${goal.title}`,
+        description: `Ahorro: ${goal.title}`,
+        date: new Date().toISOString(),
+        activityType: 'important',
+        linkedGoalId: goal.id,
+      });
+    } else if (abono < 0 && goal.id) {
+      // Reducción manual: devolver al saldo como ingreso
+      await addTransaction({
+        type: 'income',
+        amount: Math.abs(abono),
+        category: 'income',
+        description: `Devolución: ${goal.title}`,
         date: new Date().toISOString(),
         activityType: 'important',
         linkedGoalId: goal.id,
       });
     }
 
-    // Si se redujo el monto (reversión): eliminar la transacción del abono
-    if (abono < 0 && goal.id) {
-      await deleteTransactionByLinkedGoal(goal.id, Math.abs(abono));
-    }
-
     await refreshAll();
   };
 
-  const removeGoal = async (id: number) => {
-    await deleteSavingsGoal(id);
+  const removeGoal = async (id: number, refundAmount?: number, cancelReason?: string) => {
+    const goal = savingsGoals.find((g) => g.id === id);
+    if (!goal) return;
+
+    const cycleKey = getCurrentCycleDates(settings?.payDay ?? 1).cycleStart.toISOString().slice(0, 10);
+
+    // Marcar como cancelada (queda en historial)
+    await updateSavingsGoal({
+      ...goal,
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelledCycleKey: cycleKey,
+      cancelReason: cancelReason ?? '',
+      refundAmount: refundAmount ?? 0,
+    });
+
+    // Si hay monto a devolver, crear ingreso
+    if (refundAmount && refundAmount > 0) {
+      await addTransaction({
+        type: 'income',
+        amount: refundAmount,
+        category: 'income',
+        description: `Reembolso: ${goal.title}`,
+        note: cancelReason,
+        date: new Date().toISOString(),
+        activityType: 'important',
+      });
+    }
+
     await refreshAll();
   };
 
@@ -330,11 +371,57 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const editDebt = async (debt: Debt) => {
-    await updateDebt(debt);
+    const previous = debts.find((d) => d.id === debt.id);
+    const prevPaid = previous?.paidAmount ?? 0;
+    const newPaid = debt.paidAmount;
+    const abono = newPaid - prevPaid;
+
+    // Registrar ciclo al saldar
+    const isNowSettled = debt.status === 'settled' && previous?.status !== 'settled';
+    const debtToSave = isNowSettled
+      ? {
+        ...debt,
+        settledCycleKey: getCurrentCycleDates(settings?.payDay ?? 1).cycleStart.toISOString().slice(0, 10),
+        settledAt: new Date().toISOString(),
+      }
+      : debt;
+
+    await updateDebt(debtToSave);
+
+    // Registrar transacción por el abono
+    if (abono > 0 && debt.id) {
+      if (debt.direction === 'owe') {
+        // Yo pagué → es un gasto
+        await addTransaction({
+          type: 'expense',
+          amount: abono,
+          category: debt.category,
+          description: `Pago deuda: ${debt.title} → ${debt.personName}`,
+          date: new Date().toISOString(),
+          activityType: 'important',
+          linkedDebtId: debt.id,
+        });
+      } else {
+        // Me pagaron → es un ingreso
+        await addTransaction({
+          type: 'income',
+          amount: abono,
+          category: 'income',
+          description: `Cobro deuda: ${debt.title} ← ${debt.personName}`,
+          date: new Date().toISOString(),
+          activityType: 'important',
+          linkedDebtId: debt.id,
+        });
+      }
+    }
+
     await refreshAll();
   };
 
   const removeDebt = async (id: number) => {
+    // Al eliminar una deuda nunca se revierten las transacciones:
+    // - owe: el dinero ya salió de tu bolsillo
+    // - owed: el dinero que te pagaron ya está en tu saldo
     await deleteDebt(id);
     await refreshAll();
   };

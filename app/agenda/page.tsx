@@ -14,12 +14,17 @@ import EventModal from '@/components/EventModal';
 import { ScheduledEvent } from '@/lib/db';
 
 export default function AgendaPage() {
-  const { scheduledEvents, settings, updateEvent } = useFinance();
+  const { scheduledEvents, settings, updateEvent, removeEvent } = useFinance();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<number>(today.getDate());
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState<ScheduledEvent | null>(null);
+
+  // Modal de confirmación de pago con monto real
+  const [payConfirm, setPayConfirm] = useState<ScheduledEvent | null>(null);
+  const [actualSpent, setActualSpent] = useState('');
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
@@ -46,10 +51,23 @@ export default function AgendaPage() {
     .filter((e) => e.status === 'pending')
     .slice(0, 6);
 
-  const toggleStatus = async (event: ScheduledEvent) => {
-    // paid -> pending, pending -> paid
-    const newStatus = event.status === 'paid' ? 'pending' : 'paid';
-    await updateEvent({ ...event, status: newStatus });
+  // Abre modal de pago o revierte si ya está pagado
+  const handlePayClick = (event: ScheduledEvent) => {
+    if (event.status === 'paid') {
+      updateEvent({ ...event, status: 'pending' });
+      return;
+    }
+    setActualSpent(event.amount.toString());
+    setPayConfirm(event);
+  };
+
+  // Confirma el pago con el monto real gastado
+  const handleConfirmPay = async () => {
+    if (!payConfirm) return;
+    const real = parseFloat(actualSpent) || payConfirm.amount;
+    await updateEvent({ ...payConfirm, status: 'paid', amount: real });
+    setPayConfirm(null);
+    setActualSpent('');
   };
 
   const isOverdue = (event: ScheduledEvent) => {
@@ -57,6 +75,20 @@ export default function AgendaPage() {
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     return eventDate < todayStart && event.status === 'pending';
   };
+
+  // Se puede cancelar si está pendiente y NO está vencido
+  const isCancellable = (event: ScheduledEvent) => {
+    const eventDate = new Date(event.dueDate);
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return event.status === 'pending' && eventDate >= todayStart;
+  };
+
+  // Cálculo de diferencia para el modal de pago
+  const budgetedAmount = payConfirm?.amount ?? 0;
+  const realAmount = parseFloat(actualSpent) || 0;
+  const diff = budgetedAmount - realAmount;
+  const hasSurplus = diff > 0;
+  const hasDeficit = diff < 0;
 
   const dayLabels = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
@@ -147,14 +179,14 @@ export default function AgendaPage() {
                   background: isSelected
                     ? 'var(--accent-blue)'
                     : isToday
-                      ? 'rgba(var(--accent-blue-rgb, 79,124,255), 0.12)'
+                      ? 'rgba(79,124,255,0.1)'
                       : 'transparent',
                 }}
               >
                 <span
                   className="text-sm font-medium"
                   style={{
-                    color: isSelected ? 'white' : isToday ? 'var(--accent-blue)' : '#F1F5F9',
+                    color: isSelected ? 'white' : isToday ? '#4F7CFF' : '#F1F5F9',
                     fontFamily: 'var(--font-display)',
                   }}
                 >
@@ -165,13 +197,13 @@ export default function AgendaPage() {
                     {hasImportant && (
                       <span
                         className="w-1.5 h-1.5 rounded-full"
-                        style={{ background: isSelected ? 'white' : 'var(--dot-color, #4F7CFF)' }}
+                        style={{ background: isSelected ? 'white' : '#4F7CFF' }}
                       />
                     )}
                     {hasLeisure && (
                       <span
                         className="w-1.5 h-1.5 rounded-full"
-                        style={{ background: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--dot-alt-color, #8B5CF6)' }}
+                        style={{ background: isSelected ? 'rgba(255,255,255,0.7)' : '#8B5CF6' }}
                       />
                     )}
                   </div>
@@ -190,7 +222,7 @@ export default function AgendaPage() {
           </h2>
           <span
             className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
-            style={{ background: 'rgba(var(--accent-blue-rgb, 79,124,255), 0.15)', color: 'var(--accent-blue)' }}
+            style={{ background: 'rgba(79,124,255,0.15)', color: '#4F7CFF' }}
           >
             {selectedDateStr.slice(5, 10).split('-').reverse().join('/')}
           </span>
@@ -240,7 +272,7 @@ export default function AgendaPage() {
                     </p>
                     {isOverdue(event) ? (
                       <button
-                        onClick={() => toggleStatus(event)}
+                        onClick={() => handlePayClick(event)}
                         className="badge"
                         style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}
                       >
@@ -248,19 +280,30 @@ export default function AgendaPage() {
                       </button>
                     ) : event.status === 'paid' ? (
                       <button
-                        onClick={() => toggleStatus(event)}
+                        onClick={() => handlePayClick(event)}
                         className="badge badge-paid"
                         title="Clic para marcar como pendiente"
                       >
                         ✓ Pagado
                       </button>
                     ) : (
-                      <button
-                        onClick={() => toggleStatus(event)}
-                        className="badge badge-pending"
-                      >
-                        Pagar
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handlePayClick(event)}
+                          className="badge badge-pending"
+                        >
+                          Pagar
+                        </button>
+                        {isCancellable(event) && (
+                          <button
+                            onClick={() => setConfirmCancel(event)}
+                            className="badge"
+                            style={{ background: 'rgba(148,163,184,0.12)', color: '#94A3B8', border: '1px solid rgba(148,163,184,0.2)' }}
+                          >
+                            ✕ Cancelar
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -307,16 +350,27 @@ export default function AgendaPage() {
                     </p>
                     {isOverdue(event) ? (
                       <button
-                        onClick={() => toggleStatus(event)}
+                        onClick={() => handlePayClick(event)}
                         className="badge"
                         style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}
                       >
                         ⚠ Desfasado
                       </button>
                     ) : (
-                      <button onClick={() => toggleStatus(event)} className="badge badge-pending">
-                        Pagar
-                      </button>
+                      <div className="flex gap-1.5 justify-end mt-1">
+                        <button onClick={() => handlePayClick(event)} className="badge badge-pending">
+                          Pagar
+                        </button>
+                        {isCancellable(event) && (
+                          <button
+                            onClick={() => setConfirmCancel(event)}
+                            className="badge"
+                            style={{ background: 'rgba(148,163,184,0.12)', color: '#94A3B8', border: '1px solid rgba(148,163,184,0.2)' }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -335,6 +389,131 @@ export default function AgendaPage() {
 
       <BottomNav />
       {showAddEvent && <EventModal onClose={() => setShowAddEvent(false)} defaultDate={selectedDateStr} />}
+
+      {/* ── Modal confirmación de pago ── */}
+      {payConfirm && (
+        <div className="modal-overlay" style={{ zIndex: 100 }} onClick={() => setPayConfirm(null)}>
+          <div
+            className="modal-sheet"
+            style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
+            <h2 className="text-text-primary font-display font-bold text-lg mb-1">
+              Confirmar Pago
+            </h2>
+            <p className="text-text-secondary text-sm mb-5">
+              ¿Cuánto gastaste realmente en{' '}
+              <span className="text-text-primary font-semibold">{payConfirm.title}</span>?
+            </p>
+
+            <div className="flex items-center justify-between p-3 rounded-xl mb-3"
+              style={{ background: 'var(--bg-elevated)' }}>
+              <p className="text-text-muted text-xs font-semibold tracking-widest">PRESUPUESTADO</p>
+              <p className="text-text-primary font-display font-bold text-sm">
+                {formatCurrency(payConfirm.amount, settings?.currency)}
+              </p>
+            </div>
+
+            <p className="text-text-muted text-xs font-semibold tracking-widest mb-2">MONTO REAL GASTADO</p>
+            <input
+              className="input-field mb-3"
+              type="number"
+              inputMode="decimal"
+              value={actualSpent}
+              onChange={(e) => setActualSpent(e.target.value)}
+              placeholder="0.00"
+              autoFocus
+            />
+
+            {realAmount > 0 && realAmount !== payConfirm.amount && (
+              <div
+                className="flex items-center justify-between p-3 rounded-xl mb-3"
+                style={{
+                  background: hasSurplus ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                  border: `1px solid ${hasSurplus ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                }}
+              >
+                <p className="text-sm font-semibold" style={{ color: hasSurplus ? '#10B981' : '#EF4444' }}>
+                  {hasSurplus ? '✨ Sobrante' : '⚠️ Excedido'}
+                </p>
+                <p className="font-display font-bold text-sm" style={{ color: hasSurplus ? '#10B981' : '#EF4444' }}>
+                  {hasSurplus ? '+' : '-'}{formatCurrency(Math.abs(diff), settings?.currency)}
+                </p>
+              </div>
+            )}
+
+            {realAmount > 0 && (
+              <p className="text-text-muted text-xs mb-5 leading-relaxed">
+                {hasSurplus
+                  ? `El sobrante de ${formatCurrency(diff, settings?.currency)} será devuelto a tu saldo disponible.`
+                  : hasDeficit
+                    ? `El excedente de ${formatCurrency(Math.abs(diff), settings?.currency)} será descontado de tu saldo.`
+                    : '¡Gastaste exactamente lo presupuestado!'}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button className="btn-secondary flex-1" onClick={() => setPayConfirm(null)}>
+                Cancelar
+              </button>
+              <button
+                className="btn-primary flex-1"
+                onClick={handleConfirmPay}
+                disabled={!actualSpent || realAmount === 0}
+                style={{ opacity: !actualSpent || realAmount === 0 ? 0.5 : 1 }}
+              >
+                ✓ Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel event modal */}
+      {confirmCancel && (
+        <div className="modal-overlay" style={{ zIndex: 100 }} onClick={() => setConfirmCancel(null)}>
+          <div
+            className="modal-sheet"
+            style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
+                style={{ background: 'rgba(148,163,184,0.12)' }}>
+                🗑️
+              </div>
+              <div>
+                <p className="text-text-primary font-display font-bold">Cancelar evento</p>
+                <p className="text-text-muted text-xs">{confirmCancel.title}</p>
+              </div>
+            </div>
+            <p className="text-text-secondary text-sm mb-6">
+              ¿Seguro que quieres cancelar este evento de{' '}
+              <span className="text-text-primary font-semibold">
+                {formatCurrency(confirmCancel.amount, settings?.currency)}
+              </span>
+              ? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button className="btn-secondary flex-1" onClick={() => setConfirmCancel(null)}>
+                No, conservar
+              </button>
+              <button
+                className="flex-1 py-3.5 rounded-xl font-semibold text-white"
+                style={{ background: '#EF4444' }}
+                onClick={async () => {
+                  if (confirmCancel.id) await removeEvent(confirmCancel.id);
+                  setConfirmCancel(null);
+                }}
+              >
+                Sí, cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

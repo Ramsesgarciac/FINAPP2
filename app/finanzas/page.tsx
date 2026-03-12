@@ -12,7 +12,7 @@ const GOAL_COLORS_BLUE = ['#4F7CFF', '#8B5CF6', '#10B981', '#F97316', '#EC4899',
 const GOAL_COLORS_ROSE = ['#EC4899', '#F472B6', '#F9A8D4', '#FB7185', '#C084FC', '#F43F5E'];
 
 export default function FinanzasPage() {
-    const { savingsGoals, updateGoal, settings, debts, editDebt, removeDebt, theme } = useFinance();
+    const { savingsGoals, updateGoal, settings, debts, editDebt, removeDebt, removeGoal, theme } = useFinance();
     const isRose = theme === 'rose';
     const GOAL_COLORS = isRose ? GOAL_COLORS_ROSE : GOAL_COLORS_BLUE;
     const accent = isRose ? '#EC4899' : '#4F7CFF';
@@ -28,9 +28,33 @@ export default function FinanzasPage() {
     const [showAddGoal, setShowAddGoal] = useState(false);
     const [addingTo, setAddingTo] = useState<SavingsGoal | null>(null);
     const [addAmount, setAddAmount] = useState('');
+    // Delete goal flow
+    const [deletingGoal, setDeletingGoal] = useState<SavingsGoal | null>(null);
+    const [deleteStep, setDeleteStep] = useState<'reason' | 'refund'>('reason');
+    const [deleteReason, setDeleteReason] = useState('');
+    const [deleteRefund, setDeleteRefund] = useState('');
+
+    const handleDeleteGoal = async () => {
+        if (!deletingGoal?.id) return;
+        const refundAmount = parseFloat(deleteRefund) || 0;
+        await removeGoal(deletingGoal.id, refundAmount, deleteReason.trim() || undefined);
+        setDeletingGoal(null);
+        setDeleteStep('reason');
+        setDeleteReason('');
+        setDeleteRefund('');
+    };
+
+    const openDeleteGoal = (goal: SavingsGoal) => {
+        setDeletingGoal(goal);
+        setDeleteStep('reason');
+        setDeleteReason('');
+        setDeleteRefund(goal.currentAmount > 0 ? String(goal.currentAmount) : '');
+    };
 
     const activeGoals = savingsGoals.filter((g) => g.status === 'active');
-    const completedGoals = savingsGoals.filter((g) => g.status !== 'active');
+    const completedGoals = savingsGoals.filter((g) => g.status === 'completed');
+    const cancelledGoals = savingsGoals.filter((g) => g.status === 'cancelled');
+    const historyGoals = [...completedGoals, ...cancelledGoals];
     const totalMonthlySavingsNeeded = activeGoals.reduce(
         (sum, goal) => sum + calcMonthlyTarget(goal.targetAmount, goal.currentAmount, goal.deadline), 0
     );
@@ -204,13 +228,22 @@ export default function FinanzasPage() {
                                                 <p className="text-text-secondary text-xs">
                                                     Ahorrar: <span className="font-semibold" style={{ color }}>{formatCurrency(monthly, settings?.currency)}/mes</span>
                                                 </p>
-                                                <button
-                                                    onClick={() => setAddingTo(goal)}
-                                                    className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
-                                                    style={{ background: `${color}20`, color }}
-                                                >
-                                                    + Abonar
-                                                </button>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => setAddingTo(goal)}
+                                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                                                        style={{ background: `${color}20`, color }}
+                                                    >
+                                                        + Abonar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openDeleteGoal(goal)}
+                                                        className="px-2 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                                                        style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444' }}
+                                                    >
+                                                        🗑
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     );
@@ -219,28 +252,67 @@ export default function FinanzasPage() {
                         )}
                     </section>
 
-                    {/* Completed goals */}
-                    {completedGoals.length > 0 && (
+                    {/* Goals history (completed + cancelled) */}
+                    {historyGoals.length > 0 && (
                         <section className="px-5 mb-5">
                             <div className="flex items-center justify-between mb-3">
-                                <h2 className="text-text-primary font-display font-semibold text-sm">Completadas</h2>
-                                <span className="text-text-muted text-xs">{completedGoals.length} meta(s)</span>
+                                <h2 className="text-text-primary font-display font-semibold text-sm">Historial</h2>
+                                <span className="text-text-muted text-xs">{historyGoals.length} meta(s)</span>
                             </div>
                             <div className="flex flex-col gap-2">
-                                {completedGoals.map((goal) => (
-                                    <div key={goal.id} className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: 'var(--bg-card)', opacity: 0.6 }}>
-                                        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.15)' }}>
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                                <path d="M20 6L9 17L4 12" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
+                                {historyGoals.map((goal) => {
+                                    const isCancelled = goal.status === 'cancelled';
+                                    return (
+                                        <div key={goal.id} className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: 'var(--bg-card)', opacity: isCancelled ? 0.55 : 0.7 }}>
+                                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                                                style={{ background: isCancelled ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.15)' }}>
+                                                {isCancelled ? (
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                                        <path d="M18 6L6 18M6 6l12 12" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                                        <path d="M20 6L9 17L4 12" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-text-secondary text-sm font-medium line-through truncate">{goal.title}</p>
+                                                <p className="text-text-muted text-xs">
+                                                    {isCancelled
+                                                        ? `${formatCurrency(goal.currentAmount, settings?.currency)} acumulado`
+                                                        : `${formatCurrency(goal.targetAmount, settings?.currency)} completado`}
+                                                </p>
+                                                {isCancelled && goal.cancelReason && (
+                                                    <p className="text-text-muted text-xs mt-0.5 truncate">📝 {goal.cancelReason}</p>
+                                                )}
+                                                {isCancelled && goal.refundAmount != null && goal.refundAmount > 0 && (
+                                                    <p className="text-xs mt-0.5" style={{ color: '#10B981' }}>
+                                                        ↩ Devuelto: {formatCurrency(goal.refundAmount, settings?.currency)}
+                                                    </p>
+                                                )}
+                                                {isCancelled && goal.cancelledCycleKey && (
+                                                    <p className="text-text-muted text-xs mt-0.5">
+                                                        📅 Ciclo: {new Date(goal.cancelledCycleKey + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                )}
+                                                {!isCancelled && goal.completedCycleKey && (
+                                                    <p className="text-text-muted text-xs mt-0.5">
+                                                        📅 Ciclo: {new Date(goal.completedCycleKey + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <span
+                                                className="badge flex-shrink-0"
+                                                style={isCancelled
+                                                    ? { background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)' }
+                                                    : { background: 'rgba(16,185,129,0.12)', color: '#10B981', border: '1px solid rgba(16,185,129,0.2)' }}
+                                            >
+                                                {isCancelled ? '✕ Cancelada' : '✓ Completada'}
+                                            </span>
                                         </div>
-                                        <div className="flex-1">
-                                            <p className="text-text-secondary text-sm font-medium line-through">{goal.title}</p>
-                                            <p className="text-text-muted text-xs">{formatCurrency(goal.targetAmount, settings?.currency)} ahorrado</p>
-                                        </div>
-                                        <span className="badge badge-paid">✓ Completada</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </section>
                     )}
@@ -314,6 +386,11 @@ export default function FinanzasPage() {
                                                         📅 {new Date(debt.dueDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                     </p>
                                                 )}
+                                                {debt.settledCycleKey && (
+                                                    <p className="text-text-muted text-xs mt-0.5">
+                                                        ✅ Saldada en ciclo: {new Date(debt.settledCycleKey + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                )}
                                                 {debt.note && <p className="text-text-muted text-xs mt-0.5 italic">"{debt.note}"</p>}
                                             </div>
                                             <div className="text-right ml-3">
@@ -380,6 +457,115 @@ export default function FinanzasPage() {
                         <button className="btn-primary" onClick={handleAddAmount} disabled={!addAmount} style={{ opacity: !addAmount ? 0.5 : 1 }}>
                             💰 Abonar
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Delete goal modal (3 pasos) ── */}
+            {/* ── Delete goal modal (2 pasos) ── */}
+            {deletingGoal && (
+                <div className="modal-overlay" style={{ zIndex: 100 }} onClick={() => { setDeletingGoal(null); setDeleteStep('reason'); }}>
+                    <div className="modal-sheet" style={{ paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))' }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <div className="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5" />
+
+                        {/* Paso 1: Motivo de cancelación */}
+                        {deleteStep === 'reason' && (
+                            <>
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
+                                        style={{ background: 'rgba(239,68,68,0.1)' }}>🗑️</div>
+                                    <div>
+                                        <p className="text-text-primary font-display font-bold">Cancelar meta</p>
+                                        <p className="text-text-muted text-xs">{deletingGoal.title}</p>
+                                    </div>
+                                </div>
+                                {deletingGoal.currentAmount > 0 && (
+                                    <div className="p-3 rounded-xl mb-4" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' }}>
+                                        <p className="text-xs font-semibold" style={{ color: '#F97316' }}>
+                                            💰 Tienes {formatCurrency(deletingGoal.currentAmount, settings?.currency)} acumulados
+                                        </p>
+                                        <p className="text-text-muted text-xs mt-0.5">En el siguiente paso podrás indicar cuánto regresa a tu saldo.</p>
+                                    </div>
+                                )}
+                                <p className="text-text-muted text-xs font-semibold tracking-widest mb-2">MOTIVO (opcional)</p>
+                                <input
+                                    className="input-field mb-6"
+                                    placeholder="Ej: Ya no necesito esta meta"
+                                    value={deleteReason}
+                                    onChange={(e) => setDeleteReason(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="flex gap-3">
+                                    <button className="btn-secondary flex-1" onClick={() => { setDeletingGoal(null); setDeleteStep('reason'); }}>
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        className="flex-1 py-3.5 rounded-xl font-semibold text-white"
+                                        style={{ background: '#EF4444' }}
+                                        onClick={() => {
+                                            if (deletingGoal.currentAmount > 0) setDeleteStep('refund');
+                                            else handleDeleteGoal();
+                                        }}
+                                    >
+                                        Continuar
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Paso 2: ¿Cuánto se devuelve? */}
+                        {deleteStep === 'refund' && (
+                            <>
+                                <p className="text-text-primary font-display font-bold text-lg mb-1">¿Cuánto se devuelve?</p>
+                                <p className="text-text-secondary text-sm mb-5">
+                                    Tenías <span className="text-text-primary font-bold">{formatCurrency(deletingGoal.currentAmount, settings?.currency)}</span> ahorrados.
+                                    Ingresa el monto que regresa a tu saldo (puede ser 0).
+                                </p>
+                                <p className="text-text-muted text-xs font-semibold tracking-widest mb-2">MONTO A DEVOLVER</p>
+                                <div className="relative mb-2">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted text-sm font-semibold">$</span>
+                                    <input
+                                        className="input-field pl-8"
+                                        type="number"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={deleteRefund}
+                                        onChange={(e) => setDeleteRefund(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="flex gap-2 mb-5">
+                                    <button
+                                        className="text-xs px-3 py-1.5 rounded-lg"
+                                        style={{ background: 'rgba(16,185,129,0.1)', color: '#10B981', border: '1px solid rgba(16,185,129,0.2)' }}
+                                        onClick={() => setDeleteRefund(String(deletingGoal.currentAmount))}
+                                    >
+                                        Todo ({formatCurrency(deletingGoal.currentAmount, settings?.currency)})
+                                    </button>
+                                    <button
+                                        className="text-xs px-3 py-1.5 rounded-lg"
+                                        style={{ background: 'rgba(148,163,184,0.08)', color: '#94A3B8', border: '1px solid rgba(148,163,184,0.15)' }}
+                                        onClick={() => setDeleteRefund('0')}
+                                    >
+                                        Nada ($0)
+                                    </button>
+                                </div>
+                                {parseFloat(deleteRefund) > 0 && (
+                                    <div className="p-3 rounded-xl mb-4" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                                        <p className="text-xs font-semibold" style={{ color: '#10B981' }}>
+                                            ✅ Se agregarán {formatCurrency(parseFloat(deleteRefund), settings?.currency)} a tu saldo disponible
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="flex gap-3">
+                                    <button className="btn-secondary flex-1" onClick={() => setDeleteStep('reason')}>← Volver</button>
+                                    <button className="btn-primary flex-1" onClick={handleDeleteGoal}>
+                                        Confirmar cancelación
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
